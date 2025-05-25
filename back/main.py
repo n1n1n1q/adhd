@@ -147,17 +147,15 @@ async def get_video(video_id: str):
 
 def generate_random_timestamps():
     random_timestamps = []
-    event_types = ["start", "takeoff", "landing", "stop", "turn", "acceleration"]
+    event_types = ["стілець", "кнур", "goko_4orta", "tank", "pidoor", "acceleration"]
 
     num_events = random.randint(5, 10)
 
     for i in range(num_events):
         event_name = random.choice(event_types)
-        start_time = random.randint(0, 59)
-        end_time = random.randint(0, 59)
-
+        start_time = random.randint(0, 10)
         random_timestamps.append(
-            {"event": f"{event_name} {i+1}", "start": start_time, "end": end_time}
+            {"event": f"{event_name} {i+1}", "start": start_time}
         )
 
     return random_timestamps
@@ -192,7 +190,10 @@ async def compare_videos(video_id1: str, video_id2: str):
 
     video1["url"] = f"/static/videos/{filename1}"
     video2["url"] = f"/static/videos/{filename2}"
-
+    video1["_id"] = str(video1["_id"])
+    video2["_id"] = str(video2["_id"])
+    video1["metadata"] = None
+    video2["metadata"] = None
     return {
         "video1": video1,
         "video2": video2,
