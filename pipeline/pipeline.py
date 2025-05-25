@@ -17,7 +17,7 @@ from recon3D.data.cloud import compare_objects_hausdorff
 
 import torch
 
-debug_mode = False
+debug_mode = True
 
 
 def video_to_point_cloud(video_path, pre_output_dict_path=None):
@@ -51,49 +51,20 @@ def load_videos_map_objects(
         video2, pre_output_dict2
     )
 
-    # Specify which classes to detect (example: only detect people, chairs, and tables)
     classes_to_detect = ["chair", "bottle"]
-    detector = Detector(model_path="yolov8x.pt", classes=classes_to_detect)
+    detector = Detector(
+        model_path="yolov8x-seg.pt", classes=classes_to_detect, segmentation=True
+    )
 
     # Print available classes
     print("Available classes:", detector.get_class_names())
 
-    map_classes(detector, output_dict1, pcd1)
-    map_classes(detector, output_dict2, pcd2)
-
-    if debug_mode:
-        for class_name, pcs in pcd1.interesting_clouds.items():
-            visualize_pcds(pcs, window_name=class_name)
-
-        for class_name, pcs in pcd1.interesting_clouds.items():
-            visualize_pcds(pcs, window_name="second" + class_name)
-
-    if debug_mode:
-        if pcd1.interesting_clouds is not None:
-            print(pcd1.interesting_clouds.keys())
-        else:
-            print("pcd1.interesting_clouds is None")
-
-        if pcd2.interesting_clouds is not None:
-            print(pcd2.interesting_clouds.keys())
-        else:
-            print("pcd2.interesting_clouds is None")
-
-        pcd1.pcd.paint_uniform_color([1.0, 0.0, 0.0])
-        pcd2.pcd.paint_uniform_color([0.0, 1.0, 0.0])
+    map_classes(detector, output_dict1, pcd1, True)
+    map_classes(detector, output_dict2, pcd2, True)
 
     day1_to_day2 = icp(pcd1.pcd, pcd2.pcd)
 
     pcd1 = pcd1 @ day1_to_day2
-
-    if debug_mode:
-        for class_name, pc in pcd1.interesting_clouds.items():
-            pc.paint_uniform_color([1.0, 0.0, 0.0])
-            visualize_pcds(pcd1.pcd, pc, window_name=f"Day 1 - {class_name}")
-
-        for class_name, pc in pcd2.interesting_clouds.items():
-            pc.paint_uniform_color([0.0, 1.0, 0.0])
-            visualize_pcds(pcd2.pcd, pc, window_name=f"Day 2 - {class_name}")
 
     missing_obj_frames12 = compare_objects_hausdorff(pcd1, pcd2, threshold=0.3)
 
@@ -108,15 +79,6 @@ def load_videos_map_objects(
     )
 
     if debug_mode:
-        for class_name_1, obj1 in pcd1.interesting_clouds.items():
-            for class_name_2, obj2 in pcd2.interesting_clouds.items():
-
-                obj1.paint_uniform_color([1.0, 0.0, 0.0])
-                obj2.paint_uniform_color([0.0, 1.0, 0.0])
-                visualize_pcds(
-                    obj1, obj2, window_name=f"{class_name_1} to {class_name_2}"
-                )
-
         for i, missing_obj in enumerate(missing_obj_frames12):
             message = f"Missing object {i+1} on day 1: {missing_obj['obj_name']} -> {missing_obj['obj_frame']}"
             print(message)
@@ -197,15 +159,6 @@ if __name__ == "__main__":
 
     video_file2 = "assets/hackaton videos /IMG_2266.MOV"
     reconstruction_file_path2 = "data/saved_reconstruction_day2.pkl"
-
-    day1_missing_in_day2, day2_missing_in_day1, time_intervals1, time_intervals2 = (
-        load_videos_map_objects(
-            video_file1,
-            video_file2,
-            reconstruction_file_path1,
-            reconstruction_file_path2,
-        )
-    )
 
     video1_intersting_intervals, video2_intersting_intervals = (
         load_videos_map_intervals(

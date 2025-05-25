@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from recon3D.data.utils import visualize_pcds
 
-debug_mode = False 
+debug_mode = False
 
 
 @dataclass

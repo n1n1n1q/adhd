@@ -7,7 +7,7 @@ import open3d as o3d
 from collections import defaultdict
 
 
-def map_classes(detector, output_dict, res_pcd, segmentation=False):
+def map_classes(detector, output_dict, res_pcd, segmentation=False, confidence=75):
     """
     Map class names to indices.
     """
@@ -17,6 +17,8 @@ def map_classes(detector, output_dict, res_pcd, segmentation=False):
     for i in range(len(output_dict["views"])):
         view = output_dict["views"][i]
         pred = output_dict["preds"][i]
+        conf = pred["conf"].cpu().numpy()
+        print(conf.shape)
         if segmentation:
             res = detector.process_frame_with_tracking_and_segmentation(view["img"])
         else:
@@ -33,9 +35,17 @@ def map_classes(detector, output_dict, res_pcd, segmentation=False):
                     cls_id, x_min, y_min, x_max, y_max, _, _, class_name = box
                 key = f"{class_name}{cls_id}"
                 pcds_frames[key].append(i)
-                if segmentation:
+                keep_frac = 1.0 - confidence / 100.0
+                k = max(1, int(len(conf) * keep_frac))
+                idx = np.argpartition(-conf, k - 1)[:k].astype(bool)
+                if segmentation and mask is not None:
                     mask = mask.astype(bool)
-                    block = pred["pts3d_local_aligned_to_global"][mask, :]
+                    mask = mask & idx
+                    mask = mask.reshape(view["img"].shape[1], view["img"].shape[2])
+
+                    block = pred["pts3d_local_aligned_to_global"]
+                    print(block.shape, mask.shape)
+                    block = block[mask, :]
                     detected_pcds[key].extend(block.reshape(-1, 3).tolist())
                     flat_colors = view["img"].reshape(3, -1).T
                     flat_mask = mask.ravel().astype(bool)

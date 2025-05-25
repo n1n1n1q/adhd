@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+from typing import Optional
+
+sys.path.append(str(Path(__file__).parent.parent))
+
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from fastapi import FastAPI, File, UploadFile, Form
@@ -10,9 +16,10 @@ import shutil
 import subprocess
 import json
 from datetime import datetime
-from pathlib import Path
 import uuid
 import random
+
+from pipeline.pipeline import load_videos_map_intervals
 
 origins = ["http://localhost:3000", "http://127.0.0.1:3000"]  # Next.js dev server
 UPLOAD_DIR = Path("./back/uploads")
@@ -39,22 +46,22 @@ app.mount("/static/videos", StaticFiles(directory=UPLOAD_DIR), name="videos")
 
 
 class TimestampsModel(BaseModel):
-    event: str = None
-    start: str = None
-    end: str = None
+    event: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
 
 
 class VideoCreate(BaseModel):
     video_name: str
     file_path: str
-    timestamps: list[TimestampsModel] = None
+    timestamps: Optional[list[TimestampsModel]] = None
 
 
 @app.post("/api/videos/", status_code=201)
 async def create_video(video_name: str, video_file: UploadFile):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     unique_id = str(uuid.uuid4())[:8]
-    file_extension = os.path.splitext(video_file.filename)[1]
+    file_extension = os.path.splitext(video_file.filename or "")[1]
     safe_filename = (
         f"{video_name.replace(' ', '_')}_{timestamp}_{unique_id}{file_extension}"
     )
@@ -85,7 +92,11 @@ async def create_video(video_name: str, video_file: UploadFile):
 
 
 def insert_video(video_name, file_path, timestamps_json, metadata=None):
-    created_at = metadata.get("format", {}).get("tags", {}).get("creation_time", None)
+    created_at = None
+    if metadata:
+        created_at = (
+            metadata.get("format", {}).get("tags", {}).get("creation_time", None)
+        )
     video_document = {
         "video_name": video_name,
         "file_path": file_path,
@@ -172,17 +183,22 @@ async def compare_videos(video_id1: str, video_id2: str):
     if not video1 or not video2:
         return {"error": "One or both videos not found"}, 404
 
-    random_timestamps = generate_random_timestamps()
+    video1_interval, video2_interval = load_videos_map_intervals(
+        video1["file_path"],
+        video2["file_path"],
+        "data/saved_reconstruction_day1.pkl",
+        "data/saved_reconstruction_day2.pkl",
+    )
 
-    video1["timestamps"] = random_timestamps
-    video2["timestamps"] = random_timestamps
+    video1["timestamps"] = video1_interval
+    video2["timestamps"] = video1_interval
 
     videos_collection.update_one(
-        {"_id": ObjectId(video_id1)}, {"$set": {"timestamps": random_timestamps}}
+        {"_id": ObjectId(video_id1)}, {"$set": {"timestamps": video1_interval}}
     )
 
     videos_collection.update_one(
-        {"_id": ObjectId(video_id2)}, {"$set": {"timestamps": random_timestamps}}
+        {"_id": ObjectId(video_id2)}, {"$set": {"timestamps": video2_interval}}
     )
 
     filename1 = os.path.basename(video1["file_path"])
@@ -197,7 +213,7 @@ async def compare_videos(video_id1: str, video_id2: str):
     return {
         "video1": video1,
         "video2": video2,
-        "message": "Random timestamps generated and saved to database",
+        "message": "Timestamps generated and saved to database",
     }
 
 
